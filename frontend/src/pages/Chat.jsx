@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { api } from "@/lib/api";
+import { api, streamChat } from "@/lib/api";
 import { useTheme } from "@/context/ThemeContext";
 import { personaOf } from "@/lib/personas";
 import { PersonaBackground } from "@/components/PersonaBackground";
@@ -45,14 +45,19 @@ export default function Chat() {
     if (!input.trim() || sending) return;
     const text = input.trim();
     setInput("");
-    setMessages((m) => [...m, { role: "user", content: text }]);
+    setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
     setSending(true);
     try {
-      const res = await api.post(`/agents/${agentId}/chat`, { message: text });
-      setMessages((m) => [...m, { role: "assistant", content: res.data.content }]);
+      await streamChat(agentId, text, (delta) => {
+        setMessages((m) => {
+          const copy = [...m];
+          copy[copy.length - 1] = { role: "assistant", content: copy[copy.length - 1].content + delta };
+          return copy;
+        });
+      });
     } catch {
       toast.error("The agent couldn't respond. Try again.");
-      setMessages((m) => m.slice(0, -1));
+      setMessages((m) => m.slice(0, -2));
       setInput(text);
     } finally {
       setSending(false);
@@ -118,7 +123,7 @@ export default function Chat() {
               </motion.div>
             )
           )}
-          {sending && (
+          {sending && messages[messages.length - 1]?.content === "" && (
             <div className="pl-5 border-l-2 flex gap-1.5 items-center" style={{ borderColor: p.accent }}>
               {[0, 1, 2].map((i) => (
                 <span key={i} className="h-2 w-2 rounded-full animate-bounce"

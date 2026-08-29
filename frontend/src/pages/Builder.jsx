@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { api } from "@/lib/api";
+import { api, streamChat } from "@/lib/api";
 import { useTheme } from "@/context/ThemeContext";
-import { PERSONAS, SUGGESTIONS, MODELS, personaOf } from "@/lib/personas";
+import { PERSONAS, getSuggestions, MODELS, personaOf } from "@/lib/personas";
 import { PersonaBackground } from "@/components/PersonaBackground";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,7 @@ import { Markdown } from "@/components/Markdown";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Send, Save, Sparkles } from "lucide-react";
+import { ArrowLeft, Send, Save, Sparkles, Upload, FileText, X } from "lucide-react";
 import { toast } from "sonner";
 
 const FIELD = ({ label, children, testid }) => (
@@ -70,11 +70,20 @@ export default function Builder() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef(null);
+  const fileRef = useRef(null);
+
+  // knowledge base
+  const [docs, setDocs] = useState([]);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => { setPersona(form.persona); }, [form.persona, setPersona]);
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, sending]);
+  useEffect(() => {
+    if (!previewId) return;
+    api.get(`/agents/${previewId}/documents`).then((r) => setDocs(r.data)).catch(() => {});
+  }, [previewId]);
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
   const p = personaOf(form.persona);
@@ -106,6 +115,37 @@ export default function Builder() {
     if (id) navigate("/dashboard");
   };
 
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    let id = previewId;
+    if (!id) { id = await saveAgent(); if (!id) return; }
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await api.post(`/agents/${id}/documents`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setDocs((d) => [...d, res.data]);
+      toast.success(`${file.name} added to knowledge base`);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const removeDoc = async (docId) => {
+    try {
+      await api.delete(`/agents/${previewId}/documents/${docId}`);
+      setDocs((d) => d.filter((x) => x.id !== docId));
+    } catch {
+      toast.error("Could not remove document");
+    }
+  };
+
   const sendPreview = async () => {
     if (!input.trim() || sending) return;
     let id = previewId;
@@ -115,14 +155,19 @@ export default function Builder() {
     }
     const text = input.trim();
     setInput("");
-    setMessages((m) => [...m, { role: "user", content: text }]);
+    setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
     setSending(true);
     try {
-      const res = await api.post(`/agents/${id}/chat`, { message: text });
-      setMessages((m) => [...m, { role: "assistant", content: res.data.content }]);
+      await streamChat(id, text, (delta) => {
+        setMessages((m) => {
+          const copy = [...m];
+          copy[copy.length - 1] = { role: "assistant", content: copy[copy.length - 1].content + delta };
+          return copy;
+        });
+      });
     } catch {
       toast.error("The agent couldn't respond. Try again.");
-      setMessages((m) => m.slice(0, -1));
+      setMessages((m) => m.slice(0, -2));
       setInput(text);
     } finally {
       setSending(false);
@@ -191,31 +236,31 @@ export default function Builder() {
             <FIELD label="Role" testid="field-role">
               <Textarea data-testid="input-role" value={form.role} onChange={(e) => set("role")(e.target.value)}
                 rows={2} placeholder="Who is this agent?" className={inputCls} />
-              <Chips items={SUGGESTIONS.role} onPick={set("role")} />
+              <Chips items={getSuggestions(form.persona, "role")} onPick={set("role")} />
             </FIELD>
 
             <FIELD label="Goal" testid="field-goal">
               <Textarea data-testid="input-goal" value={form.goal} onChange={(e) => set("goal")(e.target.value)}
                 rows={2} placeholder="What should it help you achieve?" className={inputCls} />
-              <Chips items={SUGGESTIONS.goal} onPick={set("goal")} />
+              <Chips items={getSuggestions(form.persona, "goal")} onPick={set("goal")} />
             </FIELD>
 
             <FIELD label="Background & expertise" testid="field-background">
               <Textarea data-testid="input-background" value={form.background} onChange={(e) => set("background")(e.target.value)}
                 rows={2} placeholder="What experience does it draw on?" className={inputCls} />
-              <Chips items={SUGGESTIONS.background} onPick={set("background")} />
+              <Chips items={getSuggestions(form.persona, "background")} onPick={set("background")} />
             </FIELD>
 
             <FIELD label="Expected output" testid="field-output">
               <Textarea data-testid="input-output" value={form.expected_output} onChange={(e) => set("expected_output")(e.target.value)}
                 rows={2} placeholder="How should responses be shaped?" className={inputCls} />
-              <Chips items={SUGGESTIONS.expected_output} onPick={set("expected_output")} />
+              <Chips items={getSuggestions(form.persona, "expected_output")} onPick={set("expected_output")} />
             </FIELD>
 
             <FIELD label="Tone & personality" testid="field-tone">
               <Input data-testid="input-tone" value={form.tone} onChange={(e) => set("tone")(e.target.value)}
                 className={inputCls} />
-              <Chips items={SUGGESTIONS.tone} onPick={set("tone")} />
+              <Chips items={getSuggestions(form.persona, "tone")} onPick={set("tone")} />
             </FIELD>
 
             <FIELD label="Model" testid="field-model">
@@ -237,6 +282,44 @@ export default function Builder() {
                   ))}
                 </SelectContent>
               </Select>
+            </FIELD>
+
+            <FIELD label="Knowledge base" testid="field-knowledge">
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".pdf,.txt,.md,.docx"
+                onChange={handleUpload}
+                className="hidden"
+                data-testid="doc-file-input"
+              />
+              <button
+                type="button"
+                data-testid="upload-doc-button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-white/20 text-zinc-300 hover:border-white/40 hover:text-white transition-colors disabled:opacity-60"
+              >
+                <Upload className="h-4 w-4" />
+                {uploading ? "Reading document…" : "Upload a document the agent can reference"}
+              </button>
+              <p className="font-mono text-[10px] text-zinc-500">PDF, DOCX, TXT or MD · up to 5MB</p>
+              {docs.length > 0 && (
+                <div className="space-y-2 pt-1" data-testid="doc-list">
+                  {docs.map((d) => (
+                    <div key={d.id} data-testid={`doc-${d.id}`}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                      <FileText className="h-4 w-4 shrink-0" style={{ color: p.accent }} />
+                      <span className="text-sm text-zinc-200 truncate flex-1">{d.filename}</span>
+                      <span className="font-mono text-[10px] text-zinc-500">{(d.chars / 1000).toFixed(1)}k</span>
+                      <button data-testid={`remove-doc-${d.id}`} onClick={() => removeDoc(d.id)}
+                        className="p-1 rounded-full text-zinc-500 hover:text-red-300 hover:bg-red-500/20 transition-colors">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </FIELD>
           </div>
         </div>
@@ -273,7 +356,7 @@ export default function Builder() {
                   </motion.div>
                 )
               )}
-              {sending && (
+              {sending && messages[messages.length - 1]?.content === "" && (
                 <div className="pl-4 border-l-2 flex gap-1.5 items-center" style={{ borderColor: p.accent }}>
                   {[0, 1, 2].map((i) => (
                     <span key={i} className="h-2 w-2 rounded-full animate-bounce"

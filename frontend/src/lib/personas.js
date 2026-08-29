@@ -68,44 +68,70 @@ export const MODELS = [
   { provider: "gemini", name: "gemini-3-flash-preview", label: "Gemini 3 Flash — snappy" },
 ];
 
-// Field-specific smart suggestions (dropdown chips)
-export const SUGGESTIONS = {
-  role: [
-    "Senior Legal Counsel specializing in contract law",
-    "Quantitative Research Analyst",
-    "Certified Financial Planner & Wealth Strategist",
-    "Creative Director & Brand Storyteller",
-    "Clinical Health Navigator",
-    "Startup Co-Founder & Growth Engineer",
-    "Executive Productivity Coach",
-  ],
-  goal: [
-    "Guide me to the optimal decision with clear trade-offs",
-    "Break big objectives into a prioritized action plan",
-    "Stress-test my thinking and surface blind spots",
-    "Turn raw ideas into a polished, ready-to-ship output",
-    "Keep me accountable and two steps ahead at all times",
-  ],
-  background: [
-    "15+ years of front-line, real-world expertise in the domain",
-    "Trained on best practices, frameworks and case studies",
-    "Deep cross-disciplinary knowledge with a systems mindset",
-    "Obsessed with clarity, first principles and measurable outcomes",
-  ],
-  expected_output: [
-    "Structured answer + a clear Next Best Step with rationale",
-    "Step-by-step plan with why each step matters",
-    "Concise summary, then deeper detail on request",
-    "Options table with pros, cons and my recommendation",
-    "Bullet points, no fluff, decision-ready",
-  ],
-  tone: [
-    "Warm, natural and professional",
-    "Direct, no-nonsense and efficient",
-    "Encouraging mentor who challenges me",
-    "Calm, precise and analytical",
-    "Witty, energetic and inspiring",
-  ],
+// Field-specific smart suggestions, tailored per persona
+const TONES = [
+  "Warm, natural and professional",
+  "Direct, no-nonsense and efficient",
+  "Encouraging mentor who challenges me",
+  "Calm, precise and analytical",
+  "Witty, energetic and inspiring",
+];
+
+export const PERSONA_SUGGESTIONS = {
+  default: {
+    role: ["Executive Productivity & Life Coach", "All-around personal chief of staff", "Strategic thinking partner"],
+    goal: ["Keep me clear, focused and two steps ahead", "Break big goals into a prioritized plan", "Help me make better decisions faster"],
+    background: ["Behavioral science, habit design and prioritization", "Broad cross-domain expertise with a systems mindset", "Obsessed with clarity and measurable outcomes"],
+    expected_output: ["Structured answer + a clear Next Best Step", "Concise summary, then deeper detail on request", "Bullet points, no fluff, decision-ready"],
+  },
+  law: {
+    role: ["Senior Legal Counsel specializing in contract law", "Corporate & IP attorney", "Compliance and risk advisor"],
+    goal: ["Protect my interests and flag legal risks early", "Explain the smartest legal move at each step", "Review and tighten my contracts"],
+    background: ["20+ years across corporate, IP and contract law", "Frameworks-first legal reasoning", "Deep knowledge of case law and precedent"],
+    expected_output: ["Plain-English analysis with key risks flagged", "Clause-by-clause review with suggested edits", "Options with legal trade-offs, then Next Best Step"],
+  },
+  research: {
+    role: ["Quantitative & qualitative Research Analyst", "Evidence synthesis specialist", "Data-driven insight partner"],
+    goal: ["Deliver rigorous, unbiased analysis", "Tell me what the evidence means for my decision", "Surface blind spots and counter-arguments"],
+    background: ["Expert in synthesis and evidence weighting", "Trained on scientific method and statistics", "Structured, first-principles reasoning"],
+    expected_output: ["Findings, confidence level, then implications", "Sourced claims with a Next Best Step", "Comparison table with a clear recommendation"],
+  },
+  finance: {
+    role: ["Certified Financial Planner & Wealth Strategist", "Investment and portfolio advisor", "Personal CFO"],
+    goal: ["Grow and protect my wealth", "Give clear, prioritized financial guidance", "Build a plan I can actually stick to"],
+    background: ["Deep expertise in planning, investing and tax-aware strategy", "Risk management and asset allocation", "Behavioral finance and long-term thinking"],
+    expected_output: ["Options with trade-offs and my recommendation", "Numbers-backed plan with a Next Best Step", "Clear pros/cons, then the decision"],
+  },
+  creative: {
+    role: ["Creative Director & Brand Storyteller", "Copywriter and naming specialist", "Art direction partner"],
+    goal: ["Turn rough ideas into bold, on-brand creative", "Give me distinct directions to choose from", "Sharpen my message so it lands"],
+    background: ["Award-level campaigns, naming and narrative", "Visual direction and brand systems", "Understands audience psychology"],
+    expected_output: ["3 distinct directions, my pick, then Next Best Step", "Ready-to-use copy with variations", "Moodboard-in-words + rationale"],
+  },
+  medical: {
+    role: ["Clinical Health Navigator & wellness coach", "Evidence-based health educator", "Recovery and habit guide"],
+    goal: ["Help me understand my options safely", "Take the healthiest next step", "Explain risks and when to see a professional"],
+    background: ["Evidence-based and cautious", "Always recommends professional care when needed", "Grounded in current clinical guidance"],
+    expected_output: ["Clear explanation, safe options, when to see a pro", "Plain-language summary + Next Best Step", "Step-by-step guidance with caveats"],
+  },
+  tech: {
+    role: ["Startup Co-Founder & Growth Engineer", "Technical product strategist", "0→1 builder"],
+    goal: ["Get me to traction fast", "Focus only on what moves the needle", "Ship the smallest thing that validates the idea"],
+    background: ["Shipped products 0→1 with growth loops", "Lean experiments and technical depth", "Pragmatic architecture decisions"],
+    expected_output: ["Prioritized plan and the one bet that matters", "Concrete steps with a Next Best Step", "Trade-offs, then a decisive recommendation"],
+  },
+  marketing: {
+    role: ["Marketing Strategist & Campaign Architect", "Positioning and messaging expert", "Growth marketer"],
+    goal: ["Build campaigns that convert", "Tell me exactly what to launch next", "Sharpen positioning and funnel"],
+    background: ["Positioning, messaging and channel strategy", "Performance marketing and analytics", "Understands buyer psychology"],
+    expected_output: ["Campaign blueprint, key message, Next Best Step", "Channel plan with priorities", "Copy + hooks ready to test"],
+  },
+};
+
+export const getSuggestions = (persona, field) => {
+  const p = PERSONA_SUGGESTIONS[persona] || PERSONA_SUGGESTIONS.default;
+  if (field === "tone") return TONES;
+  return p[field] || PERSONA_SUGGESTIONS.default[field] || [];
 };
 
 export const TEMPLATES = [

@@ -1,8 +1,11 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import io
+import json
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
@@ -11,7 +14,7 @@ import uuid
 import httpx
 from datetime import datetime, timezone, timedelta
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -196,11 +199,12 @@ async def delete_agent(agent_id: str, user: User = Depends(get_current_user)):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Agent not found")
     await db.messages.delete_many({"agent_id": agent_id})
+    await db.documents.delete_many({"agent_id": agent_id})
     return {"ok": True}
 
 
 # ---------------- Chat ----------------
-def build_system_prompt(agent: dict, history: List[dict]) -> str:
+def build_system_prompt(agent: dict, history: List[dict], docs: Optional[List[dict]] = None) -> str:
     parts = [
         f"You are {agent.get('name', 'an AI agent')}, a highly capable all-around personal assistant.",
         f"ROLE: {agent.get('role') or 'A versatile expert assistant.'}",
@@ -219,12 +223,34 @@ def build_system_prompt(agent: dict, history: List[dict]) -> str:
         "",
         "Always end your response with a short section titled \"Next best step\" containing exactly one recommended action and a one-line rationale.",
     ]
+    if docs:
+        parts.append("\nKNOWLEDGE BASE — the user has attached the following reference documents. Use them as authoritative context when relevant and cite the document name when you rely on it:")
+        for d in docs:
+            snippet = (d.get("text") or "")[:6000]
+            parts.append(f"\n--- DOCUMENT: {d.get('filename')} ---\n{snippet}")
     if history:
         parts.append("\nCONVERSATION SO FAR:")
         for m in history[-20:]:
             role = "User" if m["role"] == "user" else "You"
             parts.append(f"{role}: {m['content']}")
     return "\n".join(parts)
+
+
+def extract_text(filename: str, data: bytes) -> str:
+    name = filename.lower()
+    try:
+        if name.endswith(".pdf"):
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(data))
+            return "\n".join((page.extract_text() or "") for page in reader.pages)
+        if name.endswith(".docx"):
+            import docx
+            doc = docx.Document(io.BytesIO(data))
+            return "\n".join(p.text for p in doc.paragraphs)
+        return data.decode("utf-8", errors="ignore")
+    except Exception as e:
+        logging.exception("extract failed")
+        return ""
 
 
 @api_router.get("/agents/{agent_id}/messages")
@@ -236,25 +262,113 @@ async def get_messages(agent_id: str, user: User = Depends(get_current_user)):
     return msgs
 
 
-@api_router.post("/agents/{agent_id}/chat")
-async def chat(agent_id: str, body: ChatIn, user: User = Depends(get_current_user)):
+# ---------------- Knowledge base ----------------
+async def _require_agent(agent_id: str, user: User) -> dict:
     agent = await db.agents.find_one({"id": agent_id, "user_id": user.user_id}, {"_id": 0})
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+    return agent
 
+
+@api_router.post("/agents/{agent_id}/documents")
+async def upload_document(agent_id: str, file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    await _require_agent(agent_id, user)
+    data = await file.read()
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 5MB)")
+    text = extract_text(file.filename, data)
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="Could not read any text from this file")
+    doc = {
+        "id": f"doc_{uuid.uuid4().hex[:12]}",
+        "agent_id": agent_id,
+        "filename": file.filename,
+        "text": text,
+        "chars": len(text),
+        "created_at": now_utc().isoformat(),
+    }
+    await db.documents.insert_one({k: v for k, v in doc.items()})
+    return {"id": doc["id"], "filename": doc["filename"], "chars": doc["chars"], "created_at": doc["created_at"]}
+
+
+@api_router.get("/agents/{agent_id}/documents")
+async def list_documents(agent_id: str, user: User = Depends(get_current_user)):
+    await _require_agent(agent_id, user)
+    docs = await db.documents.find({"agent_id": agent_id}, {"_id": 0, "text": 0}).sort("created_at", 1).to_list(100)
+    return docs
+
+
+@api_router.delete("/agents/{agent_id}/documents/{doc_id}")
+async def delete_document(agent_id: str, doc_id: str, user: User = Depends(get_current_user)):
+    await _require_agent(agent_id, user)
+    res = await db.documents.delete_one({"id": doc_id, "agent_id": agent_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"ok": True}
+
+
+def _make_chat(agent: dict, history: List[dict], docs: List[dict]) -> LlmChat:
+    system_prompt = build_system_prompt(agent, history, docs)
+    return LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"{agent['id']}",
+        system_message=system_prompt,
+    ).with_model(agent.get("model_provider", "openai"), agent.get("model_name", "gpt-5.4"))
+
+
+@api_router.post("/agents/{agent_id}/chat/stream")
+async def chat_stream(agent_id: str, body: ChatIn, user: User = Depends(get_current_user)):
+    agent = await _require_agent(agent_id, user)
     history = await db.messages.find({"agent_id": agent_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    docs = await db.documents.find({"agent_id": agent_id}, {"_id": 0}).sort("created_at", 1).to_list(100)
 
     await db.messages.insert_one({
         "id": f"msg_{uuid.uuid4().hex[:12]}", "agent_id": agent_id, "role": "user",
         "content": body.message, "created_at": now_utc().isoformat(),
     })
 
-    system_prompt = build_system_prompt(agent, history)
-    chat_client = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id=f"{agent_id}",
-        system_message=system_prompt,
-    ).with_model(agent.get("model_provider", "openai"), agent.get("model_name", "gpt-5.4"))
+    chat_client = _make_chat(agent, history, docs)
+
+    async def event_generator():
+        collected = []
+        try:
+            async for ev in chat_client.stream_message(UserMessage(text=body.message)):
+                if isinstance(ev, TextDelta):
+                    collected.append(ev.content)
+                    yield f"data: {json.dumps({'delta': ev.content})}\n\n"
+                elif isinstance(ev, StreamDone):
+                    break
+        except Exception as e:
+            logging.exception("stream error")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        text = "".join(collected)
+        if text:
+            await db.messages.insert_one({
+                "id": f"msg_{uuid.uuid4().hex[:12]}", "agent_id": agent_id, "role": "assistant",
+                "content": text, "created_at": now_utc().isoformat(),
+            })
+        yield f"data: {json.dumps({'done': True})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
+
+
+@api_router.post("/agents/{agent_id}/chat")
+async def chat(agent_id: str, body: ChatIn, user: User = Depends(get_current_user)):
+    agent = await _require_agent(agent_id, user)
+
+    history = await db.messages.find({"agent_id": agent_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    docs = await db.documents.find({"agent_id": agent_id}, {"_id": 0}).sort("created_at", 1).to_list(100)
+
+    await db.messages.insert_one({
+        "id": f"msg_{uuid.uuid4().hex[:12]}", "agent_id": agent_id, "role": "user",
+        "content": body.message, "created_at": now_utc().isoformat(),
+    })
+
+    chat_client = _make_chat(agent, history, docs)
 
     try:
         reply = await chat_client.send_message(UserMessage(text=body.message))
