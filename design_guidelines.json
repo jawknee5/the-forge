@@ -1,0 +1,132 @@
+{
+  "theme_core": {
+    "description": "Sleek dark, futuristic, and adaptive. A calm neutral base that shifts its visual mood (accents, background textures, fonts) based on the configured agent's persona.",
+    "mode": "dark"
+  },
+  "colors": {
+    "base": {
+      "background": "#09090b",
+      "surface": "#18181b",
+      "surface_elevated": "#27272a",
+      "text_primary": "#fafafa",
+      "text_secondary": "#a1a1aa",
+      "border": "rgba(255,255,255,0.1)"
+    },
+    "adaptive_personas": {
+      "default": {
+        "accent": "#ffffff",
+        "glow": "rgba(255,255,255,0.05)"
+      },
+      "law": {
+        "accent": "#b45309",
+        "glow": "rgba(180,83,9,0.15)"
+      },
+      "research": {
+        "accent": "#06b6d4",
+        "glow": "rgba(6,182,212,0.15)"
+      },
+      "finance": {
+        "accent": "#eab308",
+        "glow": "rgba(234,179,8,0.15)"
+      },
+      "creative": {
+        "accent": "#d946ef",
+        "glow": "rgba(217,70,239,0.15)"
+      },
+      "medical": {
+        "accent": "#34d399",
+        "glow": "rgba(52,211,153,0.15)"
+      }
+    }
+  },
+  "typography": {
+    "fonts": {
+      "headings": "Outfit",
+      "body": "IBM Plex Sans",
+      "mono": "JetBrains Mono"
+    },
+    "rules": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-light",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-medium",
+      "h3": "text-xl sm:text-2xl tracking-tight",
+      "body": "text-base leading-relaxed font-light",
+      "labels": "text-xs tracking-[0.2em] uppercase text-zinc-400 font-mono"
+    }
+  },
+  "visual_enhancers": {
+    "surfaces": {
+      "glassmorphism": "backdrop-blur-xl bg-zinc-950/70 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)]",
+      "solid_elevated": "bg-zinc-900 border border-white/5",
+      "trace_beam": "hover:shadow-[0_0_15px_var(--theme-accent)] transition-shadow duration-300"
+    },
+    "backgrounds": {
+      "dynamic_mesh": "Use framer-motion or standard CSS radial gradients that shift position and color based on active persona.",
+      "overlays": "When using background images, ALWAYS apply a bg-zinc-950/80 overlay to preserve text readability."
+    }
+  },
+  "components": {
+    "agent_builder_form": {
+      "style": "Glassmorphism panels floating over the dynamic background.",
+      "inputs": "bg-transparent border-b border-white/20 focus:border-[var(--theme-accent)] rounded-none px-0 py-2 text-lg focus:ring-0 transition-colors",
+      "dropdowns": "CRITICAL: Dropdown menus MUST have a solid background (bg-zinc-900 border border-white/10), NEVER transparent. Use Shadcn Select/Dropdown.",
+      "smart_suggestions": "Small chips below inputs using mono font, glowing slightly on hover."
+    },
+    "template_cards": {
+      "layout": "Bento grid (col-span-1 to col-span-2 mix).",
+      "style": "Image backgrounds with heavy black/80 overlay. On hover, image scales up 105% and overlay lightens slightly to black/60.",
+      "interactions": "Reveal 'Use Template' CTA on hover using Framer Motion."
+    },
+    "chat_interface": {
+      "layout": "Minimalist. No standard chat bubbles.",
+      "ai_message": "Sleek typography, left-aligned, accompanied by a subtle glowing vertical line on the left indicating the AI's current persona accent.",
+      "user_message": "Right-aligned, soft bg-white/5 rounded-2xl px-6 py-4.",
+      "proactive_guidance": "Floating 'Step-Ahead' widget in bottom right or directly below the latest AI response. Styled as a solid elevated surface with a shimmering border."
+    }
+  },
+  "layouts": {
+    "dashboard": "Mobile-first CSS grid. Use generous spacing (gap-8, p-8, p-12). Avoid edge-to-edge content on desktop.",
+    "builder_split_view": "Desktop: Grid 12 cols. Left 5 cols for Form, right 7 cols for Live Chat Preview."
+  },
+  "motion": {
+    "page_transitions": "Fade in and slide up slightly (opacity 0 -> 1, y: 10 -> 0).",
+    "theme_shift": "When persona changes, transition all colors and gradients over 1000ms ease-in-out.",
+    "micro_interactions": "Hover states on buttons should scale up slightly (1.02) and brighten text."
+  },
+  "images": {
+    "rules": "Never use placeholder images. Use heavy overlays (bg-zinc-950/70) to ensure text contrast.",
+    "urls": {
+      "base_futuristic": "https://images.unsplash.com/photo-1567095751004-aa51a2690368?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwyfHxmdXR1cmlzdGljJTIwZGFyayUyMGFic3RyYWN0fGVufDB8fHx8MTc4ODAyMTQ1M3ww&ixlib=rb-4.1.0&q=85",
+      "law_persona": "https://images.unsplash.com/photo-1758541213979-fe8c9996e197?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwxfHxsYXclMjBtb2Rlcm4lMjBjb3VydHJvb218ZW58MHx8fHwxNzg4MDIxNDUzfDA&ixlib=rb-4.1.0&q=85",
+      "research_persona": "https://images.unsplash.com/photo-1644088379091-d574269d422f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxkYXRhJTIwbmV0d29yayUyMGFic3RyYWN0fGVufDB8fHx8MTc4ODAyMTQ1M3ww&ixlib=rb-4.1.0&q=85",
+      "finance_persona": "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxmaW5hbmNlJTIwY2hhcnQlMjBtb2Rlcm58ZW58MHx8fHwxNzg4MDIxNDUzfDA&ixlib=rb-4.1.0&q=85",
+      "creative_persona": "https://images.unsplash.com/photo-1532640331846-d2da5987c3ee?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwxfHxjcmVhdGl2ZSUyMGNvbG9yZnVsJTIwYWJzdHJhY3R8ZW58MHx8fHwxNzg4MDIxNDUzfDA&ixlib=rb-4.1.0&q=85"
+    }
+  },
+  "accessibility": {
+    "contrast": "Ensure minimum 4.5:1 ratio. Text over images must use text-shadow or heavy background overlays.",
+    "focus": "Use focus:ring-2 focus:ring-[var(--theme-accent)] for all interactive elements.",
+    "testing": "All interactive and key informational elements MUST include a data-testid attribute in kebab-case."
+  },
+  "3d_libraries_and_media": {
+    "strategy": "Use Framer Motion for UI transitions. For background effects, standard CSS or lightweight Canvas is preferred over full Three.js to keep the builder snappy, unless specifically rendering a 3D avatar."
+  },
+  "instructions_to_main_agent": [
+    "Implement a global state (e.g., Zustand or Context) to track the 'active_persona'. Bind CSS variables (--theme-accent, --theme-glow) to this state so the entire app shifts color dynamically.",
+    "Use Tailwind arbitrary values `bg-[var(--theme-accent)]` where dynamic theming is required.",
+    "Ensure all Shadcn UI dropdowns, select menus, and dialogs have a solid dark background (`bg-zinc-900 border-zinc-800`). Do NOT use transparent backgrounds for overlays.",
+    "Use `Outfit` for all headings, `IBM Plex Sans` for body text, and `JetBrains Mono` for form labels, config keys, and smart suggestion chips.",
+    "Avoid generic Vercel/Stripe aesthetics. Make it feel cinematic and highly personalized.",
+    "For the Google Login button, style it sleekly with a subtle border and glowing hover effect, avoiding the generic white default button.",
+    "Do not use generic font families like Inter or Roboto.",
+    "Do not apply global `transition: all`. Use specific transitions like `transition-colors`, `transition-opacity`."
+  ],
+  "universal_guidelines": [
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "NEVER use AI assistant Emoji characters (🤖🧠💭💡🔮🎯).",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Main agent relies on provided image URLs. Missing categories = main agent uses placeholder text which is FORBIDDEN.",
+    "Always use modern button styles like pill-shaped or sharp with interaction animations.",
+    "Add data-testid attributes to all interactive elements."
+  ]
+}

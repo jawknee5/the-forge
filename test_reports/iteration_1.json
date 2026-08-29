@@ -1,0 +1,41 @@
+{
+  "summary": "Full-stack test of Agent Forge. Backend: created /app/backend/tests/backend_test.py (23 pytest cases) covering auth (Bearer + cookie + 401 paths + /auth/session error handling), agents CRUD with GET-after-write persistence checks, user scoping, chat + message persistence/ordering/history-injection, cascade message delete, and model interchangeability (anthropic/claude-sonnet-4-6 and gemini/gemini-3-flash-preview). 23/23 passed. Frontend: Playwright E2E over Login gating, Dashboard (8 templates + agents grid), Builder (all fields, 5 suggestion-chip groups, persona theme switch, model select, live-preview LLM reply with auto-save), Chat (history load, send, persistence across reload, persona accent), delete-with-confirm dialog, and logout. All functional flows passed. Two UI/UX defects found (raw markdown rendered as plain text; chat composer overlaps message list).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/session", "issue": "Inserts a new user_sessions doc on every login without deleting/expiring prior sessions for the same token/user - session table grows unbounded; also no unique index on session_token."},
+      {"endpoint": "POST /api/agents", "issue": "No validation on name (empty string accepted) or on model_provider/model_name against the supported MODELS list; an invalid provider only surfaces later as a 502 at chat time."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Chat.jsx / Builder.jsx assistant bubbles", "issue": "LLM replies are Markdown but rendered with whitespace-pre-wrap only, so users see raw syntax: '### Next best step', '**bold**', '***' separators. Needs a markdown renderer (e.g. react-markdown) for the polished feel the product promises.", "selector": "[data-testid=\"chat-messages\"], [data-testid=\"preview-messages\"]", "priority": "MEDIUM-HIGH"},
+      {"component": "Chat.jsx layout", "issue": "Message list height is not constrained to the viewport (main is flex-1 inside min-h-screen), so long replies scroll the whole page and message text renders behind/below the translucent sticky composer (text visibly bleeds through and continues under the input bar). Constrain the scroll container to h-[calc(100vh-Xpx)] or make the composer opaque.", "selector": "[data-testid=\"chat-messages\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard templates grid", "issues": ["Creative & Marketing template cards use bright artwork behind the 80% overlay; the small zinc-400 description text over the busy areas is borderline on contrast compared with the darker cards."]},
+      {"screen": "Builder role/goal chip rows", "issues": ["7 role suggestion chips are shown for every persona (all persona archetypes) rather than persona-relevant ones - clicking 'Quantitative Research Analyst' inside a Law persona is confusing. Consider filtering suggestions by selected persona."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Render assistant messages as Markdown in Chat.jsx and Builder.jsx live preview.",
+    "Fix Chat.jsx scroll container so messages don't render under/behind the sticky composer.",
+    "Optional: filter Builder smart-suggestion chips by selected persona.",
+    "Optional hardening: validate agent name non-empty + model_provider/model_name allow-list in AgentCreate; add unique index on user_sessions.session_token and clean up old sessions on login."
+  ],
+  "critical_code_review_comments": [
+    "server.py chat(): history is fetched BEFORE inserting the new user message, which is correct, but the entire conversation (up to 20 turns) is re-injected into the system prompt on every call - token cost grows linearly and there is no truncation by size. Consider passing real message turns to LlmChat instead of stuffing the system prompt.",
+    "server.py update_agent(): db.agents.update_one({'id': agent_id}) omits user_id in the filter (ownership is checked by the prior find_one, so it is safe today, but include user_id in the update filter to avoid future TOCTOU).",
+    "Builder.jsx imports useParams but never uses it (dead import); AuthContext.js has an empty catch block that silently swallows /auth/me errors."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "100% of functional flows; 2 UI/UX defects"},
+  "seed_data_creation": "Used existing seeded session (test-user-forge / test_session_forge). Test agents prefixed TEST_ were created and deleted by fixtures; the UI test agent 'TEST_UI Builder Agent' was deleted via the UI delete dialog. One pre-existing agent 'Atlas' left untouched.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "session_token 'test_session_forge' (Bearer header or session_token cookie), user test-user-forge / forge.tester@example.com. Valid until 2026-09-05; re-seed per /app/auth_testing.md.",
+  "context_for_next_testing_agent": "Reusable suite at /app/backend/tests/backend_test.py (token is parsed from /app/memory/test_credentials.md - regex requires the 'session_token ...: `token`' line format). For browser tests add the session_token cookie (domain=ai-forge-486.preview.emergentagent.com, secure, sameSite=None) then goto /dashboard. LLM replies take 10-40s; poll for 'Next best step' text. Remaining untested: real Google OAuth callback (cannot be automated), streaming (not implemented), mobile viewport layout.",
+  "rca_of_the_issue": "Markdown bug: assistant content is inserted as a raw text node with whitespace-pre-wrap; the system prompt instructs structured/section output so the model returns Markdown, which is never parsed. Chat overlap bug: the messages div uses flex-1 overflow-y-auto but its ancestor chain (min-h-screen, no fixed height) allows it to grow past the viewport, so overflow never activates and the sticky bottom composer paints over the content."
+}
