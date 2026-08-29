@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import io
+import re
 import json
 import logging
 from pathlib import Path
@@ -204,7 +205,7 @@ async def delete_agent(agent_id: str, user: User = Depends(get_current_user)):
 
 
 # ---------------- Chat ----------------
-def build_system_prompt(agent: dict, history: List[dict], docs: Optional[List[dict]] = None) -> str:
+def build_system_prompt(agent: dict, history: List[dict], passages: Optional[List[dict]] = None) -> str:
     parts = [
         f"You are {agent.get('name', 'an AI agent')}, a highly capable all-around personal assistant.",
         f"ROLE: {agent.get('role') or 'A versatile expert assistant.'}",
@@ -223,17 +224,64 @@ def build_system_prompt(agent: dict, history: List[dict], docs: Optional[List[di
         "",
         "Always end your response with a short section titled \"Next best step\" containing exactly one recommended action and a one-line rationale.",
     ]
-    if docs:
-        parts.append("\nKNOWLEDGE BASE — the user has attached the following reference documents. Use them as authoritative context when relevant and cite the document name when you rely on it:")
-        for d in docs:
-            snippet = (d.get("text") or "")[:6000]
-            parts.append(f"\n--- DOCUMENT: {d.get('filename')} ---\n{snippet}")
+    if passages:
+        parts.append("\nKNOWLEDGE BASE — the most relevant passages retrieved from the user's attached documents for THIS question. Treat them as authoritative context and cite the source document name when you rely on a passage:")
+        for i, d in enumerate(passages, 1):
+            parts.append(f"\n[Passage {i} · source: {d.get('filename')}]\n{d.get('text')}")
     if history:
         parts.append("\nCONVERSATION SO FAR:")
         for m in history[-20:]:
             role = "User" if m["role"] == "user" else "You"
             parts.append(f"{role}: {m['content']}")
     return "\n".join(parts)
+
+
+_STOPWORDS = set(
+    "the a an of to and or in on for with is are be as at by from this that these those it its "
+    "i you we they he she my your our their what which who how when where why do does did can could "
+    "should would will shall may might have has had not no yes about into out up down over under".split()
+)
+
+
+def _chunk_text(text: str, size: int = 800, overlap: int = 120) -> List[str]:
+    text = re.sub(r"\s+", " ", text or "").strip()
+    if not text:
+        return []
+    chunks, i = [], 0
+    while i < len(text):
+        chunks.append(text[i:i + size])
+        i += size - overlap
+    return chunks
+
+
+def retrieve_passages(docs: List[dict], query: str, k: int = 6) -> List[dict]:
+    """Lightweight keyword retriever across many documents — picks the top-k most relevant passages."""
+    all_chunks = []
+    for d in docs:
+        for c in _chunk_text(d.get("text", "")):
+            all_chunks.append((d.get("filename"), c))
+    if not all_chunks:
+        return []
+    q_terms = [t for t in re.findall(r"[a-z0-9]+", (query or "").lower()) if len(t) > 2 and t not in _STOPWORDS]
+    if not q_terms:
+        return [{"filename": f, "text": c} for f, c in all_chunks[:k]]
+    # inverse doc frequency weighting so rare query terms matter more
+    df = {t: sum(1 for _, c in all_chunks if t in c.lower()) for t in set(q_terms)}
+    import math
+    n = len(all_chunks)
+    scored = []
+    for f, c in all_chunks:
+        lc = c.lower()
+        score = 0.0
+        for t in q_terms:
+            tf = lc.count(t)
+            if tf:
+                score += tf * math.log(1 + n / (1 + df.get(t, 0)))
+        if score > 0:
+            scored.append((score, f, c))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = scored[:k] if scored else [(0, f, c) for f, c in all_chunks[:k]]
+    return [{"filename": f, "text": c} for _, f, c in top]
 
 
 def extract_text(filename: str, data: bytes) -> str:
@@ -307,8 +355,8 @@ async def delete_document(agent_id: str, doc_id: str, user: User = Depends(get_c
     return {"ok": True}
 
 
-def _make_chat(agent: dict, history: List[dict], docs: List[dict]) -> LlmChat:
-    system_prompt = build_system_prompt(agent, history, docs)
+def _make_chat(agent: dict, history: List[dict], passages: List[dict]) -> LlmChat:
+    system_prompt = build_system_prompt(agent, history, passages)
     return LlmChat(
         api_key=EMERGENT_LLM_KEY,
         session_id=f"{agent['id']}",
@@ -321,15 +369,14 @@ async def chat_stream(agent_id: str, body: ChatIn, user: User = Depends(get_curr
     agent = await _require_agent(agent_id, user)
     history = await db.messages.find({"agent_id": agent_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
     docs = await db.documents.find({"agent_id": agent_id}, {"_id": 0}).sort("created_at", 1).to_list(100)
+    passages = retrieve_passages(docs, body.message)
 
     await db.messages.insert_one({
         "id": f"msg_{uuid.uuid4().hex[:12]}", "agent_id": agent_id, "role": "user",
         "content": body.message, "created_at": now_utc().isoformat(),
     })
 
-    chat_client = _make_chat(agent, history, docs)
-
-    async def event_generator():
+    chat_client = _make_chat(agent, history, passages)
         collected = []
         try:
             async for ev in chat_client.stream_message(UserMessage(text=body.message)):
