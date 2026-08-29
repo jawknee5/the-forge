@@ -170,6 +170,22 @@ async def create_agent(body: AgentCreate, user: User = Depends(get_current_user)
     return agent
 
 
+@api_router.post("/agents/seed-presets")
+async def seed_presets(user: User = Depends(get_current_user)):
+    """Idempotently create the preconfigured R&D team for the current user only."""
+    from presets import PRESET_AGENTS
+    existing = await db.agents.find({"user_id": user.user_id}, {"_id": 0, "name": 1}).to_list(1000)
+    have = {a["name"] for a in existing}
+    created = []
+    for p in PRESET_AGENTS:
+        if p["name"] in have:
+            continue
+        agent = Agent(user_id=user.user_id, **p)
+        await db.agents.insert_one(agent.model_dump())
+        created.append(agent.name)
+    return {"created": created, "skipped": [p["name"] for p in PRESET_AGENTS if p["name"] in have]}
+
+
 @api_router.get("/agents", response_model=List[Agent])
 async def list_agents(user: User = Depends(get_current_user)):
     docs = await db.agents.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).to_list(500)

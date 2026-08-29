@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { TEMPLATES, personaOf } from "@/lib/personas";
 import { PersonaBackground } from "@/components/PersonaBackground";
 import { AgentCard } from "@/components/AgentCard";
-import { Plus, LogOut, Wand2 } from "lucide-react";
+import { Plus, LogOut, Wand2, Users } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -31,6 +31,22 @@ export default function Dashboard() {
     }
   };
   useEffect(() => { load(); }, []);
+
+  const [importing, setImporting] = useState(false);
+  const importTeam = async () => {
+    setImporting(true);
+    try {
+      const res = await api.post("/agents/seed-presets");
+      const n = res.data.created?.length || 0;
+      if (n > 0) toast.success(`Imported ${n} agent${n > 1 ? "s" : ""} to your workspace`);
+      else toast.info("Your R&D team is already imported");
+      await load();
+    } catch {
+      toast.error("Import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const applyTemplate = (t) => {
     navigate("/builder", { state: { template: t } });
@@ -83,14 +99,25 @@ export default function Dashboard() {
               Your agents
             </h1>
           </div>
-          <motion.button
-            data-testid="new-agent-button"
-            whileHover={{ scale: 1.03 }}
-            onClick={() => navigate("/builder")}
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white text-zinc-950 font-medium transition-transform"
-          >
-            <Plus className="h-4 w-4" /> New agent
-          </motion.button>
+          <div className="flex items-center gap-3">
+            <motion.button
+              data-testid="import-team-button"
+              whileHover={{ scale: 1.03 }}
+              onClick={importTeam}
+              disabled={importing}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-full border border-white/20 bg-white/5 text-white font-medium transition-colors hover:bg-white/10 disabled:opacity-60"
+            >
+              <Users className="h-4 w-4" /> {importing ? "Importing…" : "Import R&D Team"}
+            </motion.button>
+            <motion.button
+              data-testid="new-agent-button"
+              whileHover={{ scale: 1.03 }}
+              onClick={() => navigate("/builder")}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white text-zinc-950 font-medium transition-transform"
+            >
+              <Plus className="h-4 w-4" /> New agent
+            </motion.button>
+          </div>
         </div>
 
         {loading ? (
