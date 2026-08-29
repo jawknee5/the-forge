@@ -7,6 +7,7 @@ import { personaOf } from "@/lib/personas";
 import { PersonaBackground } from "@/components/PersonaBackground";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/Markdown";
+import { SpeakButton } from "@/components/SpeakButton";
 import { ArrowLeft, Send, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -120,6 +121,7 @@ export default function Chat() {
               <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                 className="pl-5 border-l-2" style={{ borderColor: p.accent }}>
                 <Markdown>{m.content}</Markdown>
+                {m.content && <SpeakButton text={m.content} accent={p.accent} />}
               </motion.div>
             )
           )}

@@ -377,6 +377,8 @@ async def chat_stream(agent_id: str, body: ChatIn, user: User = Depends(get_curr
     })
 
     chat_client = _make_chat(agent, history, passages)
+
+    async def event_generator():
         collected = []
         try:
             async for ev in chat_client.stream_message(UserMessage(text=body.message)):
@@ -409,13 +411,14 @@ async def chat(agent_id: str, body: ChatIn, user: User = Depends(get_current_use
 
     history = await db.messages.find({"agent_id": agent_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
     docs = await db.documents.find({"agent_id": agent_id}, {"_id": 0}).sort("created_at", 1).to_list(100)
+    passages = retrieve_passages(docs, body.message)
 
     await db.messages.insert_one({
         "id": f"msg_{uuid.uuid4().hex[:12]}", "agent_id": agent_id, "role": "user",
         "content": body.message, "created_at": now_utc().isoformat(),
     })
 
-    chat_client = _make_chat(agent, history, docs)
+    chat_client = _make_chat(agent, history, passages)
 
     try:
         reply = await chat_client.send_message(UserMessage(text=body.message))

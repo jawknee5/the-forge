@@ -8,6 +8,7 @@ import { PersonaBackground } from "@/components/PersonaBackground";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/Markdown";
+import { SpeakButton } from "@/components/SpeakButton";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -353,6 +354,7 @@ export default function Builder() {
                   <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                     className="pl-4 border-l-2" style={{ borderColor: p.accent }}>
                     <Markdown>{m.content}</Markdown>
+                    {m.content && <SpeakButton text={m.content} accent={p.accent} />}
                   </motion.div>
                 )
               )}
