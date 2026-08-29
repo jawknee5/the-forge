@@ -30,7 +30,12 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    (async () => {
+      try { await api.post("/agents/seed-presets"); } catch {}
+      await load();
+    })();
+  }, []);
 
   const [importing, setImporting] = useState(false);
   const importTeam = async () => {
